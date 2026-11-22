@@ -1,71 +1,74 @@
-# Fluxo de autenticação — CyberVault v0.1
+# Fluxo de autenticação — v0.1
 
-## Objetivo
-
-Descrever como o sistema recebe uma senha e decide se deve liberar a trava representada pelo servo motor.
-
-## Fluxo lógico
+## 1. Fluxograma
 
 ```mermaid
 flowchart TD
-    A[Início / aguardando entrada] --> B[Usuário pressiona teclas]
-    B --> C[Formação da senha digitada]
-    C --> D{Entrada pronta para validação?}
-    D -->|Não| B
-    D -->|Sim| E{Senha corresponde à referência?}
-    E -->|Sim| F[Autorizar acesso]
-    F --> G[Acionar servo e sinalização]
-    G --> H[Retornar ao estado de espera]
-    E -->|Não| I[Negar acesso e sinalizar erro]
-    I --> H
-    H --> A
+    S[Inicialização: fechar e mostrar tela] --> K[Consultar teclado]
+    K --> Q{Tecla recebida?}
+    Q -->|Não| K
+    Q -->|Sim| T{Tipo de tecla}
+    T -->|0 a 9| L{Menos de 4 dígitos?}
+    L -->|Sim| D[Acrescentar dígito e mostrar *]
+    L -->|Não| K
+    D --> K
+    T -->|*| X[Limpar entrada e restaurar tela]
+    X --> K
+    T -->|#| C{Entrada igual a 1234?}
+    C -->|Sim| A[Exibir permitido; LED verde; servo 90°]
+    A --> W[Esperar 5 segundos]
+    W --> F[Servo 0°; LEDs apagados]
+    C -->|Não| N[Exibir negado; LED vermelho]
+    N --> E[Esperar 2 segundos; apagar LED]
+    F --> R[Limpar entrada e restaurar tela]
+    E --> R
+    R --> K
+    T -->|A, B, C, D| K
 ```
 
-Este fluxograma é **conceitual**. A maneira exata como a entrada é concluída e como o sistema retorna à espera depende do código-fonte.
+## 2. Exemplo: acesso autorizado
 
-## Cenário A — Senha correta
+1. O LCD mostra `CYBERVAULT` e `Senha: `.
+2. O usuário pressiona `1`, `2`, `3`, `4`.
+3. O LCD mostra `Senha: ****`; a senha real permanece em `senhaDigitada`.
+4. O usuário pressiona `#`.
+5. O código compara `"1234" == "1234"`.
+6. O LCD mostra `ACESSO PERMITIDO`, o LED verde acende e o servo recebe o comando 90°.
+7. Após 5 segundos, o servo recebe 0°, os LEDs apagam e a tela inicial retorna.
 
-**Pré-condição:** sistema inicializado e pronto para receber teclas.
+## 3. Exemplo: acesso negado
 
-1. O usuário informa a senha configurada no protótipo: `1234`.
-2. O firmware compara a entrada com a senha de referência.
-3. A comparação resulta em autorização.
-4. O servo representa a abertura da trava.
-5. LCD e LEDs sinalizam o resultado, conforme a implementação.
+1. O usuário digita `0000` e pressiona `#`.
+2. A comparação com `1234` falha.
+3. O LCD mostra `ACESSO NEGADO`; o LED vermelho acende por 2 segundos.
+4. A entrada é limpa e a tela inicial retorna, **sem bloqueio por tentativas anteriores**.
 
-**Resultado esperado:** acesso autorizado.
+## 4. Casos de teste para reprodução no Tinkercad
 
-## Cenário B — Senha incorreta
+Os resultados abaixo são **esperados pela leitura do código**; devem ser confirmados e registrados na simulação.
 
-1. O usuário informa uma combinação diferente da senha de referência.
-2. O firmware realiza a comparação.
-3. A comparação resulta em negação.
-4. A trava não deve ser liberada.
-5. LCD e LEDs sinalizam a falha, conforme a implementação.
+| ID | Entrada | Resultado esperado |
+| --- | --- | --- |
+| AUTH-01 | `1234#` | Acesso permitido; servo 90° por cerca de 5 s e depois 0°. |
+| AUTH-02 | `0000#` | Acesso negado; LED vermelho por cerca de 2 s. |
+| AUTH-03 | `12*1234#` | `*` limpa a entrada; a senha posterior é aceita. |
+| AUTH-04 | `12345#` | O quinto dígito é ignorado; a entrada `1234` é aceita. |
+| AUTH-05 | `#` sem dígitos | Acesso negado, pois `"" != "1234"`. |
+| AUTH-06 | `12#` | Acesso negado. |
+| AUTH-07 | `A`, `B`, `C` ou `D` | Nenhuma ação de autenticação ou atualização de LCD. |
+| AUTH-08 | `0000#` repetido | Cada tentativa é negada, sem contador ou bloqueio. |
 
-**Resultado esperado:** acesso negado.
+## 5. Evidências recomendadas
 
-## Cenário C — Tentativas repetidas
+- Captura do LCD antes da digitação.
+- Captura de `Senha: ****` antes de pressionar `#`.
+- Captura do estado de acesso permitido (LCD, servo e LED verde).
+- Captura do estado de acesso negado (LCD e LED vermelho).
+- Registro das mensagens seriais correspondentes.
+- Vídeo curto ou sequência de capturas de tentativas incorretas repetidas para o experimento CV-01.
 
-Este cenário prepara o experimento CV-01.
+Nomeie evidências com IDs dos testes, por exemplo `auth-01-access-granted.png`. Não inclua credenciais novas ou segredos reais nas capturas.
 
-1. Informar uma senha incorreta.
-2. Observar a resposta do sistema.
-3. Repetir o processo várias vezes no simulador.
-4. Registrar se existe contador de falhas, atraso progressivo ou bloqueio temporário.
+## 6. Limites da validação
 
-**Hipótese da v0.1:** o firmware permite tentativas sucessivas sem limite. **Confirmar em teste antes de registrar como resultado observado.**
-
-## Casos de teste
-
-| ID | Entrada / ação | Resultado esperado | Resultado observado |
-| --- | --- | --- | --- |
-| AUTH-01 | Digitar `1234` | Acesso autorizado | Pendente de evidência |
-| AUTH-02 | Digitar senha diferente de `1234` | Acesso negado | Pendente de evidência |
-| AUTH-03 | Repetir senhas incorretas | Verificar se há bloqueio | Pendente de teste |
-| AUTH-04 | Digitar entrada incompleta | Registrar comportamento real | Pendente de teste |
-| AUTH-05 | Usar teclas especiais | Registrar comportamento real | Pendente de teste |
-
-## Evidências sugeridas
-
-Armazenar imagens ou vídeos em `assets/screenshots/` e referenciá-los nesta página após a execução dos testes. Não registrar um resultado como comprovado sem evidência correspondente.
+O firmware não mede duração real da movimentação mecânica do servo; `delay(5000)` define a espera após o comando. Os testes devem diferenciar comportamento esperado pelo código de comportamento observado na simulação.

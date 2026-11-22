@@ -1,66 +1,85 @@
-# Limitações de segurança — CyberVault v0.1
+# Análise de segurança e limitações — firmware v0.1
 
-## Propósito
+## Escopo e método
 
-Identificar riscos da implementação inicial e organizar hipóteses para experimentos controlados no Tinkercad. O objetivo é comparar a versão vulnerável com melhorias posteriores, sem apresentar hipóteses como vulnerabilidades já comprovadas.
+Análise estática do sketch Arduino fornecido. As constatações abaixo são derivadas do código, **não** de um pentest executado nem de medições no hardware físico. O CyberVault é um laboratório didático; a v0.1 não deve ser usada para proteger bens reais.
 
-## Limitações e hipóteses
+## SEC-01 — Tentativas ilimitadas de senha
 
-| ID | Item | Situação | Risco potencial | Verificação recomendada |
-| --- | --- | --- | --- | --- |
-| CV-01 | Ausência de limite de tentativas | Hipótese a confirmar | Adivinhação repetida de senhas | Executar sucessivas entradas inválidas e observar bloqueios |
-| CV-02 | Senha curta e previsível (`1234`) | Configuração conhecida do protótipo | Baixa resistência à adivinhação | Confirmar a senha no código e testar alternativas |
-| CV-03 | Senha armazenada diretamente no firmware | A verificar no `.ino` | Exposição do segredo em código ou binário | Inspecionar definição e uso da senha |
-| CV-04 | Ausência de registro de tentativas | A verificar | Dificuldade de auditoria | Inspecionar logs, Serial e persistência |
-| CV-05 | Ausência de persistência de bloqueio | A verificar | Reinício pode apagar estado de segurança | Verificar comportamento após reset |
+**Evidência no código:** ao pressionar `#`, o firmware compara `senhaDigitada` com `SENHA_CORRETA`, chama `abrirCofre()` ou `negarAcesso()` e limpa a entrada. Não existe contador de falhas nem condição de bloqueio.
 
-## CV-01 — Tentativas ilimitadas de senha
+**Impacto:** um usuário com acesso ao teclado pode tentar combinações sucessivas. Há um atraso de 2 segundos em cada tentativa incorreta, mas isso não equivale a um limite de tentativas.
 
-### Descrição
+**Mitigação planejada:** contador de erros consecutivos, bloqueio temporário após três falhas, política explícita de reinicialização e testes de contorno.
 
-Se o sistema aceitar novas tentativas imediatamente após uma falha, sem impor limite ou atraso, um usuário com acesso físico ao teclado poderá testar múltiplas combinações.
+**Experimento:** CV-01 — força bruta / tentativas ilimitadas em ambiente simulado.
 
-### Pré-condições
+## SEC-02 — Senha fixa e embutida no firmware
 
-- Acesso ao teclado do protótipo ou ao simulador.
-- Sistema operacional e pronto para receber entradas.
+**Evidência no código:** `const String SENHA_CORRETA = "1234";`.
 
-### Procedimento de validação
+**Impacto:** a senha é previsível e está exposta a qualquer pessoa que tenha acesso ao código-fonte. O sketch não oferece alteração de senha em tempo de execução.
 
-1. Iniciar a simulação.
-2. Digitar uma senha incorreta.
-3. Registrar a resposta do LCD, LEDs e servo.
-4. Repetir o processo pelo menos cinco vezes.
-5. Verificar se existe bloqueio ou espera obrigatória.
-6. Registrar capturas e resultados na documentação do experimento.
+**Mitigação planejada:** permitir provisionamento/troca controlada de credencial; não distribuir credenciais operacionais no repositório. Em um dispositivo real, a proteção de armazenamento exige avaliação da plataforma.
 
-### Impacto
+## SEC-03 — Autenticação baseada em segredo único compartilhado
 
-Possibilidade de tentativas repetidas de adivinhação de senha, caso a hipótese seja confirmada. A probabilidade de sucesso depende do tamanho, da previsibilidade da senha e das condições de acesso ao dispositivo.
+**Evidência no código:** há uma única variável `SENHA_CORRETA` e a comparação não distingue usuários.
 
-### Mitigação planejada
+**Impacto:** não há identificação individual, revogação por usuário ou atribuição de ações a uma pessoa específica.
 
-- Limitar tentativas consecutivas (proposta inicial: três falhas).
-- Aplicar bloqueio temporário (proposta inicial: 30 segundos).
-- Informar o bloqueio ao usuário pelo LCD.
-- Definir claramente quando o contador de falhas é reiniciado.
-- Testar o comportamento após reinicialização do dispositivo.
+**Mitigação possível:** definir identidades e credenciais distintas se o escopo futuro exigir múltiplos usuários.
 
-> **Atenção:** um bloqueio apenas em memória pode ser contornado por reinicialização. Essa limitação deve ser discutida e testada na versão protegida.
+## SEC-04 — Ausência de auditoria persistente
 
-## CV-02 — Senha previsível
+**Evidência no código:** `Serial.println("Cofre aberto")`, `Serial.println("Cofre fechado")` e `Serial.println("Senha incorreta")` são as únicas mensagens de resultado. Não há escrita em EEPROM, cartão SD, servidor ou outro armazenamento persistente.
 
-A senha `1234` é adequada para demonstração didática, mas inadequada para um controle de acesso real. Recomenda-se avaliar senhas menos previsíveis e uma política de autenticação apropriada ao hardware.
+**Impacto:** o sistema não mantém histórico durável de tentativas, horários ou eventos de autenticação.
 
-## Critérios para considerar uma vulnerabilidade confirmada
+**Mitigação possível:** projetar registro de eventos com política de retenção, integridade e proteção de dados, respeitando as limitações do microcontrolador.
 
-- Comportamento reproduzido no simulador.
-- Versão do firmware identificada.
-- Passos documentados.
-- Evidências capturadas.
-- Impacto descrito sem exagero.
-- Correção e teste de regressão registrados separadamente.
+## SEC-05 — Ausência de sensor de posição ou estado físico
 
-## Fora do escopo desta branch
+**Evidência no código:** o firmware usa `trava.write(0)` e `trava.write(90)`, mas não consulta sensor que confirme o fechamento ou a abertura física.
 
-Esta documentação não implementa correções, não altera a senha, não modifica o circuito e não comprova automaticamente as hipóteses listadas. As alterações serão desenvolvidas em branches próprias.
+**Impacto:** o programa **comanda** a trava, mas não comprova que o mecanismo alcançou a posição esperada. Isso é uma limitação de observabilidade física, não uma exploração demonstrada.
+
+**Mitigação possível:** adicionar sensor de posição/fim de curso e tratamento de falhas mecânicas em versões futuras.
+
+## SEC-06 — Esperas bloqueantes
+
+**Evidência no código:** `delay(5000)` em `abrirCofre()` e `delay(2000)` em `negarAcesso()`.
+
+**Impacto:** durante esses períodos, o `loop()` não processa novas leituras do teclado. Isso limita a responsividade e pode complicar recursos futuros, como alarme, cancelamento ou monitoramento contínuo.
+
+**Mitigação possível:** substituir esperas bloqueantes por controle de estados baseado em `millis()`.
+
+## SEC-07 — Máscara visual não protege o segredo em memória
+
+**Evidência no código:** o LCD imprime `*`, mas `senhaDigitada` contém os caracteres efetivamente pressionados e a senha correta está definida em texto no sketch.
+
+**Impacto:** a máscara protege contra leitura casual da tela, mas não é criptografia nem proteção da credencial no código-fonte.
+
+**Mitigação possível:** adotar um modelo de gestão de credenciais apropriado à capacidade e ao modelo de ameaça do dispositivo.
+
+## O que esta análise NÃO comprova
+
+- Não foi demonstrado ataque remoto: o sketch fornecido não implementa Wi-Fi, Bluetooth ou rede.
+- Não foi testada extração de firmware, acesso por interfaces de depuração ou adulteração física.
+- Não foi medida a taxa real de tentativas nem o comportamento do servo em hardware físico.
+- Não foi atribuída pontuação CVSS: isso exige contexto e modelo de ameaça definidos; a ausência de uma pontuação não significa ausência de risco.
+
+## Plano de evolução
+
+| Versão/experimento | Objetivo | Critério de aceitação sugerido |
+| --- | --- | --- |
+| v0.1 — baseline | Preservar comportamento vulnerável | Testes AUTH-01 a AUTH-08 reproduzidos |
+| CV-01 — exploração | Demonstrar tentativas incorretas sucessivas | Evidência de ausência de bloqueio |
+| CV-01 — correção | Limitar falhas consecutivas | Após 3 erros, negar novas tentativas por 30 s |
+| CV-01 — regressão | Confirmar que a proteção não quebra o fluxo legítimo | Acesso correto, limpeza, expiração e reinício testados |
+
+> O comportamento diante de reinicialização durante um bloqueio deverá ser definido na implementação segura. Um contador apenas em RAM pode ser zerado por reset.
+
+## Referência
+
+Constatações baseadas exclusivamente no código-fonte Arduino do CyberVault MVP v0.1 fornecido para a documentação.

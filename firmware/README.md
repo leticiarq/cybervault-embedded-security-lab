@@ -1,43 +1,48 @@
-# Firmware — CyberVault v0.1
+# CyberVault — Firmware MVP v0.1
 
 ## Objetivo
 
-Este diretório documenta o firmware da versão inicial do **CyberVault — Embedded Security Lab**, um protótipo didático de controle de acesso físico com Arduino, teclado matricial, display LCD, servo motor e LEDs.
+Este diretório documenta o firmware original do CyberVault MVP v0.1, um protótipo didático de cofre controlado por senha com Arduino Uno, teclado matricial 4×4, LCD 16×2, servomotor e LEDs. A implementação descrita é **vulnerável por projeto** e será preservada como referência para experimentos de segurança posteriores.
 
-A versão **v0.1** é uma linha de base intencionalmente vulnerável para estudos de segurança embarcada. **Não deve ser usada para proteger bens ou controlar acesso real.**
+## Bibliotecas
 
-## Funcionamento esperado
+- `Keypad.h`: leitura das teclas do teclado matricial.
+- `LiquidCrystal.h`: controle do LCD em modo paralelo.
+- `Servo.h`: controle do servomotor que representa a trava.
 
-1. O usuário digita uma senha pelo teclado matricial 4×4.
-2. O firmware recebe e processa a entrada.
-3. A senha digitada é comparada à senha configurada no programa (no protótipo atual, `1234`).
-4. Se a senha for aceita, o sistema aciona o servo para representar a abertura da trava.
-5. Se a senha for rejeitada, o acesso não é liberado.
-6. O LCD e os LEDs apresentam informações e estados do sistema conforme o código implementado.
+## Hardware controlado pelo firmware
 
-> **Nota de verificação:** os textos exatos do LCD, a correspondência de cores dos LEDs, os ângulos do servo, as teclas de confirmação/limpeza e os tempos de espera devem ser conferidos no código `.ino` antes de serem descritos como fatos.
+| Dispositivo | Pinos usados no código | Papel |
+| --- | --- | --- |
+| Teclado 4×4 | Linhas: D2–D5; colunas: D6–D9 | Entrada de senha e comandos |
+| LCD 16×2 | `LiquidCrystal(10, 11, A0, A1, A2, A3)` | Exibe mensagens e mascara dígitos |
+| Servomotor | D12 | Simula abertura e fechamento |
+| LED verde | A4 | Indica acesso permitido |
+| LED vermelho | A5 | Indica acesso negado |
+| Serial | 9600 baud | Emite mensagens de estado |
 
-## Documentos
+> Os pinos listados são os declarados no firmware. A conferência física das ligações deve ser feita com a documentação do hardware.
 
-| Arquivo | Finalidade |
-| --- | --- |
-| [`architecture.md`](architecture.md) | Organização lógica do firmware e responsabilidades dos módulos |
-| [`authentication-flow.md`](authentication-flow.md) | Sequência de entrada, validação da senha e acionamento dos componentes |
-| [`security-limitations.md`](security-limitations.md) | Limitações conhecidas, hipóteses a validar e plano de mitigação |
+## Uso do protótipo
 
-## Escopo desta branch
+1. Inicialize a simulação e aguarde a tela `CYBERVAULT` / `Senha:`.
+2. Digite de um a quatro números. Cada número aceito aparece como `*` no LCD.
+3. Pressione `#` para comparar a entrada com a senha fixa `1234`.
+4. Pressione `*` para limpar a entrada atual e retornar à tela inicial.
+5. As teclas `A`, `B`, `C` e `D` não possuem ações implementadas.
 
-Esta branch contém **somente documentação** da versão v0.1. Não altera o circuito, o comportamento do firmware nem implementa controles de segurança.
+### Resultado da confirmação
 
-## Evidências a adicionar
+- **Senha correta:** mostra `ACESSO PERMITIDO`, acende LED verde, posiciona o servo em 90°, espera 5 segundos, retorna o servo a 0° e apaga os LEDs.
+- **Senha incorreta:** mostra `ACESSO NEGADO`, acende LED vermelho por 2 segundos e o apaga; o servo não é comandado para abrir.
+- Após qualquer confirmação, o firmware limpa a senha digitada e restaura a tela inicial.
 
-- [ ] Link para o projeto no Tinkercad.
-- [ ] Caminho e versão do código-fonte Arduino (`.ino`).
-- [ ] Captura do LCD em espera.
-- [ ] Captura ou vídeo de uma tentativa válida.
-- [ ] Captura ou vídeo de uma tentativa inválida.
-- [ ] Resultado de testes repetidos de senha incorreta, para confirmar a ausência de bloqueio.
+## Organização da documentação
 
-## Próxima etapa
+- [`architecture.md`](architecture.md): constantes, variáveis, objetos, funções e execução do firmware.
+- [`authentication-flow.md`](authentication-flow.md): fluxograma e casos de teste da autenticação.
+- [`security-limitations.md`](security-limitations.md): análise de riscos e limitações observáveis no código.
 
-Documentar e reproduzir o experimento **CV-01 — Tentativas repetidas de autenticação**, comparar a versão inicial com uma versão protegida e registrar as evidências.
+## Escopo
+
+Esta documentação descreve o código fornecido para a **v0.1**. Não implementa melhorias de segurança nem afirma que o protótipo foi validado em hardware físico. O primeiro experimento previsto é o **CV-01 — tentativas ilimitadas de senha**.
